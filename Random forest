@@ -1,0 +1,120 @@
+library(glmnet)
+library(Matrix)
+library(foreach)
+dat <- readRDS("G:/vignesh.R/Data Science/food-inspections-evaluation-master/food-inspections-evaluation-master/DATA/dat_model.Rds")
+
+adds<- dat$LICENSE_DESCRIPTION=="Retail Food Establishment"
+dat=dat[adds=="TRUE",]
+adds_null<-dat$LICENSE_DESCRIPTION==NULL
+dat <- na.omit(dat)
+adds<-pmin(dat$criticalCount,1)
+dat$criticalFound=adds
+order(dat$Inspection_ID,decreasing = FALSE)
+dat$Inspection_Date=as.character(dat$Inspection_Date)
+class(dat$Inspection_Date)
+date1<-as.Date("2013-09-01")
+date2<-as.Date("2014-07-01")
+test<-dat[dat$Inspection_Date >= date1 & dat$Inspection_Date <= date2,]
+dat=test
+xmat1=dat$Inspector_Assigned
+xmat1=as.data.frame(xmat1)
+colnames(xmat1)="inspector"
+adds<-pmin(dat$pastSerious,1)
+dat$pastSerious=adds
+xmat2=dat$pastSerious
+xmat2=as.data.frame(xmat2)
+colnames(xmat2)="pastserious"
+adds<-pmin(dat$pastCritical,1)
+dat$pastCritical=adds
+xmat3=dat$pastCritical
+xmat3=as.data.frame(xmat3)
+colnames(xmat3)="pastcritical"
+xmat4=dat$timeSinceLast
+xmat4=as.data.frame(xmat4)
+colnames(xmat4)="timesincelast"
+xmat5=dat$consumption_on_premises_incidental_activity
+xmat5=as.data.frame(xmat5)
+colnames(xmat5)="consumption_on_premises_incidental_activity"
+xmat6=dat$tobacco_retail_over_counter
+xmat6=as.data.frame(xmat6)
+colnames(xmat6)="tobacco_retail_over_counter"
+xmat7=dat$temperatureMax
+xmat7=as.data.frame(xmat7)
+colnames(xmat7)="temperatureMax"
+adds1<-pmin(dat$heat_burglary,70)
+dat$heat_burglary=adds1
+adds2<-pmin(dat$heat_sanitation,70)
+dat$heat_sanitation=adds2
+adds3<-pmin(dat$heat_garbage,50)
+dat$heat_garbage=adds3
+xmat8=dat$heat_burglary
+xmat8=as.data.frame(xmat8)
+colnames(xmat8)="heat_burglary"
+xmat9=dat$heat_sanitation
+xmat9=as.data.frame(xmat9)
+colnames(xmat9)="heat_sanitation"
+xmat10=dat$heat_garbage
+xmat10=as.data.frame(xmat10)
+colnames(xmat10)="heat_garbage"
+xmat11=ifelse(dat$ageAtInspection > 4, 1L, 0L)
+xmat11=as.data.frame(xmat11)
+colnames(xmat11)="ageAtInspection"
+keyby = dat$Inspection_ID
+View(dat)
+xmat12=dat$Inspection_ID
+xmat12=as.data.frame(xmat12)
+colnames(xmat12)="Inspection_ID"
+xmat13=dat$criticalFound
+xmat13=as.data.frame(xmat13)
+colnames(xmat13)="criticalFound"
+xmat=c(xmat1,xmat2,xmat3,xmat4,xmat5,xmat6,xmat7,xmat8,xmat9,xmat10,xmat11,xmat12,xmat13)
+xmat
+xmat=as.data.frame(xmat)
+mm <- model.matrix(criticalFound ~ . -1, data=xmat[ , -1])
+mm <- as.data.frame(mm)
+str(mm)
+colnames(mm)
+vm=as.Date(dat$Inspection_Date)
+dat$Inspection_Date=vm
+an1<-dat[dat$Inspection_Date < as.Date("2014-07-01"), ]
+an2<-dat[dat$Inspection_Date > as.Date("2014-07-01"), ]
+dat=an1
+iiTrain <- dat[  which(dat$Inspection_Date < as.Date("2014-07-01")), ]
+iiTest <- dat[  which(dat$Inspection_Date >as.Date( "2014-07-01")), ]
+nrow(dat)
+nrow(xmat)
+nrow(mm)
+penalty <- ifelse(grepl("^Inspector", colnames(mm)), 1, 0)
+penalty
+x=as.matrix(mm)
+y=xmat$criticalFound
+cvfit=glmnet(x,y,family = "binomial", 
+             alpha = 0
+             )
+cvfit
+cvfit$cv.glmnet
+plot(cvfit)
+cvfit$lambda
+cvfit$lambda.min
+coef(cvfit,s=0.005)
+predict(cvfit,newx=x[1:88,],s=c(0.01,0.05))
+cvfit$modelinfo$label
+dat$score<- predict(cvfit,
+                     newx = as.matrix(mm), 
+                     s = cvfit$lambda.min,
+                     type = "response")[,1]
+dat$score
+dat$train=1:nrow(dat)%in%iiTrain
+dat$test=1:nrow(dat)%in%iiTest
+allscores <- predict(cvfit, 
+                     newx = as.matrix(mm), 
+                     s = cvfit$lambda,
+                     type = "response")
+allscores
+allscores<-as.data.frame.table(allscores)
+colnames(allscores)
+names(allscores)[1] = 'cvfit'
+names(allscores)[2]='beta'
+allscores$Test=1:nrow(allscores) %in% iiTest        
+allscores$Train <- 1:nrow(allscores) %in% iiTrain         
+allscores
